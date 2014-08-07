@@ -1,0 +1,17 @@
+-/logs
+-/.git
+-/.ensime
+-/.ensime_lucene
+-/target
+-/.target
+-/bin
+-/project/target
+-/project/project
+-/.worksheet
+-/.settings
+-.cache
+-.classpath
+-.project
+-*.swp
+-*.orig
+-.#*
