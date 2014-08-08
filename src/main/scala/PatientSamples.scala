@@ -13,6 +13,16 @@ import com.github.nscala_time.time.Imports._
 import com.github.tototoshi.slick.MySQLJodaSupport._
 import java.io.File
 
+/** Tool that helps with a CBSR specimen pull.
+  *
+  * On 2014-08-07, Aaron Peck asked for some help with a specimen pull from KDCS. The patient
+  * information and drawn date are read from a CSV file. Specimens with a parent specimen within 5
+  * days before or after are considered.  A specimen that matches this criteria is ouput to the
+  * result CSV file. The specimen types for the pull are hard coded below.
+  *
+  * Some of the specimens were already pulled and present in the SS container. The query on the
+  * database takes this into account.
+  */
 object PatientSamples {
 
   case class DbSettings(host: String, name: String, user: String, password: String)
@@ -29,7 +39,6 @@ object PatientSamples {
     }
 
     val csvInputFilename = args(0)
-
     val output = CSVWriter.open(resultsFile)
 
     val conf = ConfigFactory.load("db")
@@ -62,8 +71,6 @@ object PatientSamples {
   * @param input Where the input is read from.
   *
   * @param output Where the output will be saved.
-  *
-  * @param countsOutput Where the counts information is saved to.
   */
 class PatientSamples(input: CSVReader, output: CSVWriter)(implicit session: Session) {
 
