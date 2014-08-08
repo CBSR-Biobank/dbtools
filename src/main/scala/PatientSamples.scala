@@ -16,9 +16,12 @@ import java.io.File
 /** Tool that helps with a CBSR specimen pull.
   *
   * On 2014-08-07, Aaron Peck asked for some help with a specimen pull from KDCS. The patient
-  * information and drawn date are read from a CSV file. Specimens with a parent specimen within 5
-  * days before or after are considered.  A specimen that matches this criteria is ouput to the
-  * result CSV file. The specimen types for the pull are hard coded below.
+  * information and date drawn are read from a CSV file. Two CSV files are generated. Since the date
+  * drawn may not be accurate, specimens with a date drawn within 5 days before or after are
+  * considered.
+  *
+  * The first CSV file lists all specimens for the patient and date drawn.  The second CSV file
+  * gives a count of the valid specimen types found for the patient and the date drawn.
   *
   * Some of the specimens were already pulled and present in the SS container. The query on the
   * database takes this into account.
@@ -27,7 +30,8 @@ object PatientSamples {
 
   case class DbSettings(host: String, name: String, user: String, password: String)
 
-  val resultsFile = "results.csv"
+  val specimensFilename = "specimens.csv"
+  val spcTypeCountFilename = "spcTypeCounts.csv"
 
   def main(args: Array[String]) = {
     if (args.size < 1) {
@@ -39,7 +43,8 @@ object PatientSamples {
     }
 
     val csvInputFilename = args(0)
-    val output = CSVWriter.open(resultsFile)
+    val specimensCsvWriter = CSVWriter.open(specimensFilename)
+    val spcTypeCountCsvWriter = CSVWriter.open(spcTypeCountFilename)
 
     val conf = ConfigFactory.load("db")
     val dbConf = conf.getConfig("db");
@@ -55,45 +60,32 @@ object PatientSamples {
       user     = dbSettings.user,
       password = dbSettings.password).withSession { implicit session =>
       try {
-        val input = CSVReader.open(csvInputFilename)
-        new PatientSamples(input, output)
-        input.close()
+        val csvReader = CSVReader.open(csvInputFilename)
+        new PatientSamples(csvReader, specimensCsvWriter, spcTypeCountCsvWriter)
+        csvReader.close()
       } catch {
         case ex: FileNotFoundException => println(s"File does not exist: $csvInputFilename")
       }
     }
 
-    output.close()
+    specimensCsvWriter.close()
+    spcTypeCountCsvWriter.close()
   }
 }
 
 /**
-  * @param input Where the input is read from.
+  * @param csvReader Where the csvReader is read from.
   *
-  * @param output Where the output will be saved.
+  * @param specimensCsvWriter Where the specimensCsvWriter will be saved.
   */
-class PatientSamples(input: CSVReader, output: CSVWriter)(implicit session: Session) {
+class PatientSamples(
+  csvReader: CSVReader,
+  specimensCsvWriter: CSVWriter,
+  spcTypeCountCsvWriter: CSVWriter)(implicit session: Session) {
 
   val log = Logger(LoggerFactory.getLogger(this.getClass))
 
   val dateFormat = DateTimeFormat.forPattern("yyyy-MM-dd")
-
-  val ssPosInclude = List(
-    "SSBH08",
-    "SSBH09",
-    "SSBH10",
-    "SSBH11",
-    "SSBH12",
-    "SSBH13",
-    "SSBH14",
-    "SSBH15",
-    "SSBJ01",
-    "SSBJ02",
-    "SSBJ03",
-    "SSBJ04",
-    "SSBJ05",
-    "SSBJ06"
-  )
 
   case class CollectionEvent(
     id: Int,
@@ -119,30 +111,28 @@ class PatientSamples(input: CSVReader, output: CSVWriter)(implicit session: Sess
     version: Int
   )
 
-  case class SpecimenDetails(
-    id: Int,
-    inventoryId: String,
-    specimenTypeName: String,
-    parentInventoryId: String,
-    studyName: String,
-    pnumber: String,
-    visitNumber: Int,
-    createdAt: DateTime,
-    quantity: Option[BigDecimal],
-    centreName: String,
-    containerLabel: String,
-    specimenPos: String,
-    topContainerTypeName: String
-  )
-
   implicit val getCollectioneventResult = GetResult(r =>
     CollectionEvent(r.<<, r.<<, r.<<, r.<<, r.<<))
 
   implicit val getSpecimenResult = GetResult(r =>
     Specimen(r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<))
 
-  implicit val getSpecimenDetailsResult = GetResult(r =>
-    SpecimenDetails(r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<))
+  val ssPosInclude = List(
+    "SSBH08",
+    "SSBH09",
+    "SSBH10",
+    "SSBH11",
+    "SSBH12",
+    "SSBH13",
+    "SSBH14",
+    "SSBH15",
+    "SSBJ01",
+    "SSBJ02",
+    "SSBJ03",
+    "SSBJ04",
+    "SSBJ05",
+    "SSBJ06"
+  )
 
   val VALID_SS_LABELS = """
     |'SSBH08', 'SSBH09', 'SSBH10', 'SSBH11', 'SSBH12', 'SSBH13', 'SSBH14', 'SSBH15',
@@ -152,11 +142,7 @@ class PatientSamples(input: CSVReader, output: CSVWriter)(implicit session: Sess
     |'Serum B', 'SerumB100', 'SerumB300', 'SerumG100', 'SerumG300', 'SerumG400'
     """.stripMargin
 
-
-  val SPECIMEN_QRY = s"""
-    |SELECT spc.id, spc.inventory_id, stype.name_short, topspc.inventory_id, study.name_short, pt.pnumber,
-    |   ce.visit_number, spc.created_at, spc.quantity, center.name_short, cntr.label,
-    |   spos.position_string, top_cntr_type.name_short
+  val BASE_QRY = s"""
     |FROM specimen spc
     |LEFT JOIN specimen topspc ON topspc.id=spc.top_specimen_id
     |JOIN specimen_type stype ON stype.id=spc.specimen_type_id
@@ -169,17 +155,48 @@ class PatientSamples(input: CSVReader, output: CSVWriter)(implicit session: Sess
     |LEFT JOIN container top_cntr ON top_cntr.id=cntr.top_container_id
     |LEFT JOIN container_type top_cntr_type ON top_cntr_type.id=top_cntr.container_type_id
     |WHERE pt.pnumber = ?
-    |AND stype.name_short like 'Serum%'
+    |AND study.name_short = 'KDCS'
+    |AND stype.name_short in ($VALID_SPC_TYPES)
     |AND topspc.id is not NULL
     |AND (DATEDIFF(topspc.created_at, ?) >= -5 AND DATEDIFF(topspc.created_at, ?) <= 5)
     |AND cntr.id is not NULL
     |AND (cntr.label not like 'SS%' OR cntr.label in ($VALID_SS_LABELS))
     |AND spc.activity_status_id = 1""".stripMargin
 
+
+  val SPECIMEN_QRY = s"""
+    |SELECT spc.id, spc.inventory_id, stype.name_short, topspc.inventory_id, pt.pnumber,
+    |   ce.visit_number, topspc.created_at, spc.quantity, center.name_short, cntr.label,
+    |   spos.position_string, top_cntr_type.name_short
+    |$BASE_QRY""".stripMargin
+
+  val SPECIMEN_TYPE_COUNT_QRY = s"""
+    |SELECT pt.pnumber, ce.visit_number, topspc.created_at, stype.name_short, count(*)
+    |$BASE_QRY
+    |GROUP BY stype.name_short""".stripMargin
+
   // used to keep track of errors
   val errors = new ListBuffer[String]
 
-  def getPatientInfo(pnumber: String, dateStr: String) = {
+  def getSpecimenInfo(pnumber: String, dateStr: String) = {
+    case class SpecimenDetails(
+      id: Int,
+      inventoryId: String,
+      specimenTypeName: String,
+      parentInventoryId: String,
+      pnumber: String,
+      visitNumber: Int,
+      dateDrawn: DateTime,
+      quantity: Option[BigDecimal],
+      centreName: String,
+      containerLabel: String,
+      specimenPos: String,
+      topContainerTypeName: String
+    )
+
+    implicit val getSpecimenDetailsResult = GetResult(r =>
+      SpecimenDetails(r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<))
+
     val qry = Q.query[(String, String, String), SpecimenDetails](SPECIMEN_QRY)
 
     val specimens = qry((pnumber, dateStr, dateStr)).list
@@ -187,52 +204,90 @@ class PatientSamples(input: CSVReader, output: CSVWriter)(implicit session: Sess
     if (specimens.isEmpty) {
       errors += s"no specimens found for patient: patient: $pnumber, date: $dateStr"
     } else {
-      val specimen = specimens(0)
-      log.debug(s"result: $specimen")
+      specimens.foreach{ specimen =>
+        log.debug(s"result: $specimen")
 
-      val row = List(
-        specimen.studyName,
-        specimen.pnumber,
-        specimen.visitNumber,
-        specimens.size,
-        specimen.inventoryId,
-        specimen.specimenTypeName,
-        dateFormat.print(specimen.createdAt),
-        specimen.quantity.getOrElse("unknown"),
-        specimen.centreName,
-        specimen.containerLabel + specimen.specimenPos,
-        specimen.topContainerTypeName
-      )
+        val row = List(
+          specimen.pnumber,
+          specimen.visitNumber,
+          dateFormat.print(specimen.dateDrawn),
+          specimen.inventoryId,
+          specimen.specimenTypeName,
+          specimen.centreName,
+          specimen.containerLabel + specimen.specimenPos,
+          specimen.topContainerTypeName
+        )
 
-      output.writeRow(row)
+        specimensCsvWriter.writeRow(row)
+      }
+
+      specimensCsvWriter.writeRow(List())
     }
   }
 
-  output.writeRow(List(
-      "study",
-      "pnumber",
-      "visitNumber",
-      "specimensFromVisit",
-      "inventoryId",
-      "specimenType",
-      "createdAt",
-      "quantity",
-      "centre",
-      "label",
-      "topContainerType"
-    ))
+  def getSpecimenCountInfo(pnumber: String, dateStr: String) = {
+    case class SpecimenTypeCount(
+      pnumber: String,
+      visitNumber: Int,
+      dateDrawn: DateTime,
+      specimenTypeName: String,
+      count: Int)
 
-  input.allWithHeaders.foreach{ csvRow =>
+    implicit val getSpecimenTypeCountResult = GetResult(r =>
+      SpecimenTypeCount(r.<<, r.<<, r.<<, r.<<, r.<<))
+
+    val qry = Q.query[(String, String, String), SpecimenTypeCount](SPECIMEN_TYPE_COUNT_QRY)
+
+    val specimenCounts = qry((pnumber, dateStr, dateStr)).list
+
+    specimenCounts.foreach{ specimenCount =>
+      log.debug(s"result: $specimenCount")
+
+      val row = List(
+        specimenCount.pnumber,
+        specimenCount.visitNumber,
+        dateFormat.print(specimenCount.dateDrawn),
+        specimenCount.specimenTypeName,
+        specimenCount.count
+      )
+
+      spcTypeCountCsvWriter.writeRow(row)
+    }
+
+    spcTypeCountCsvWriter.writeRow(List())
+  }
+
+  specimensCsvWriter.writeRow(List(
+    "pnumber",
+    "visitNumber",
+    "dateDrawn",
+    "inventoryId",
+    "specimenType",
+    "centre",
+    "label",
+    "topContainerType"
+  ))
+
+  spcTypeCountCsvWriter.writeRow(List(
+    "pnumber",
+    "visitNumber",
+    "dateDrawn",
+    "specimenType",
+    "specimenCount"
+  ))
+
+  csvReader.allWithHeaders.foreach{ csvRow =>
     //log.debug(s"$csvRow")
-    getPatientInfo(csvRow("StudyNum"), csvRow("lbCollectionDate"))
+    getSpecimenInfo(csvRow("StudyNum"), csvRow("lbCollectionDate"))
+    getSpecimenCountInfo(csvRow("StudyNum"), csvRow("lbCollectionDate"))
   }
 
   // display errors in file
   if (!errors.isEmpty) {
-    output.writeRow(List())
+    specimensCsvWriter.writeRow(List())
     errors.toList.foreach{ msg =>
       log.error(msg)
-      output.writeRow(List(msg))
+      specimensCsvWriter.writeRow(List(msg))
     }
   }
 
