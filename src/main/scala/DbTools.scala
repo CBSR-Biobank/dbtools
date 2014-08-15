@@ -1,11 +1,35 @@
 import com.typesafe.config.ConfigFactory
 import scala.slick.driver.MySQLDriver.simple._
+import scala.collection.mutable.Map
 
 object DbTools {
 
   case class DbSettings(host: String, name: String, user: String, password: String)
 
+  val commands: Map[String, Command] = Map()
+
   def main(args: Array[String]) = {
+    if (args.size < 1) {
+      println("\tError: no command given")
+      System.exit(1)
+    }
+
+    addCommands
+    val command = args(0)
+
+    if (command == "help") {
+      if (args.size == 1) {
+        showCommands
+        System.exit(0)
+      } else if (args.size == 2) {
+        showCommandHelp(args(1))
+        System.exit(0)
+      } else  {
+        println("\tError: invalid command")
+        System.exit(1)
+      }
+    }
+
     val conf = ConfigFactory.load("db")
 
     if (!conf.hasPath("db")) {
@@ -20,16 +44,43 @@ object DbTools {
       dbConf.getString("user"),
       dbConf.getString("password"))
 
+
     Database.forURL(
       s"jdbc:mysql://${dbSettings.host}:3306/${dbSettings.name}",
       driver   = "com.mysql.jdbc.Driver",
       user     = dbSettings.user,
       password = dbSettings.password).withSession { implicit session =>
 
-      args(0) match {
-        case "webtable" => SpecimenWebtable.createTable
-        case "kdcspull" => KdcsSpecimenPull.getSpecimens(args.slice(1, args.length))
+      if (commands.contains(command)) {
+        commands(command).invokeCommand(args.slice(1, args.length))
       }
+    }
+  }
+
+  def addCommands = {
+    addCommand(SpecimenWebtable)
+    addCommand(KdcsSpecimenPull)
+  }
+
+  def addCommand(command: Command) = {
+    commands += (command.Name -> command)
+  }
+
+  def showCommands = {
+    println("Possible commands:\n")
+
+    commands.values.foreach{ command =>
+      println(s"${command.Name} - ${command.Help}\n")
+    }
+  }
+
+  def showCommandHelp(commandName: String) = {
+    if (commands.contains(commandName)) {
+      val command = commands(commandName)
+      println(s"usage: ${command.Usage}\n\n${command.Help}")
+    } else  {
+      println("invalid command: $command")
+      System.exit(1)
     }
   }
 

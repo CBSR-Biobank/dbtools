@@ -1,3 +1,9 @@
+import AssemblyKeys._
+
+assemblySettings
+
+jarName in assembly := "biobank_dbtools.jar"
+
 name := "hello"
 
 version := "1.0"

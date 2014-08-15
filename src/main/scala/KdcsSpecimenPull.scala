@@ -26,16 +26,22 @@ import java.io.File
   * Some of the specimens were already pulled and present in the SS container. The query on the
   * database takes this into account.
   */
-object KdcsSpecimenPull {
+object KdcsSpecimenPull extends Command {
+
+  val Name = "kdcspull"
+
+  val Help = "Helps with a CBSR specimen pull for KDCS study. Patient information comes from file CSVFILE."
+
+  val Usage = s"$Name CSVFILE"
 
   case class DbSettings(host: String, name: String, user: String, password: String)
 
   val specimensFilename = "specimens.csv"
   val spcTypeCountFilename = "spcTypeCounts.csv"
 
-  def getSpecimens(args: Array[String])(implicit session: Session) = {
+  def invokeCommand(args: Array[String])(implicit session: Session) = {
     if (args.size < 1) {
-      println("\tError: no CSV files specified")
+      println("\tError: no CSV file specified")
       System.exit(1)
     } else if (args.size > 1) {
       println("\ttoo many paramters")
