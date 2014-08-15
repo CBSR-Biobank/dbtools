@@ -9,17 +9,20 @@ object DbTools {
   val commands: Map[String, Command] = Map()
 
   def main(args: Array[String]) = {
+    println(s"${buildinfo.BuildInfo.name} version: ${buildinfo.BuildInfo.version}")
+    addCommands
+
     if (args.size < 1) {
-      println("\tError: no command given")
+      println("Error: command not specified.\n")
+      showCommands
       System.exit(1)
     }
 
-    addCommands
     val command = args(0)
 
     if (command == "help") {
       if (args.size == 1) {
-        showCommands
+        showCommandsAndHelp
         System.exit(0)
       } else if (args.size == 2) {
         showCommandHelp(args(1))
@@ -67,6 +70,14 @@ object DbTools {
   }
 
   def showCommands = {
+    println("Possible commands:")
+
+    commands.values.foreach{ command =>
+      println(s"\t${command.Name}")
+    }
+  }
+
+  def showCommandsAndHelp = {
     println("Possible commands:\n")
 
     commands.values.foreach{ command =>

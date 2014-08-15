@@ -4,9 +4,17 @@ assemblySettings
 
 jarName in assembly := "biobank_dbtools.jar"
 
-name := "hello"
+buildInfoSettings
 
-version := "1.0"
+sourceGenerators in Compile <+= buildInfo
+
+buildInfoKeys := Seq[BuildInfoKey](name, version, scalaVersion, sbtVersion)
+
+buildInfoPackage := "buildinfo"
+
+name := "dbtools"
+
+version := "0.1-SNAPSHOT"
 
 scalaVersion := "2.11.1"
 
