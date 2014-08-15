@@ -1,5 +1,5 @@
-Database tools
-=======
-Use following command to convert XLS file to CSV:
+# Biobank database tools
 
-  libreoffice4.2 --headless --convert-to csv --outdir . Patient\ and\ Date\ file.xls
+A CLI application for running different tools that manipulate the
+[Biobank](https://github.com/cbsrbiobank/biobank) database.
+

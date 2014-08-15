@@ -9,7 +9,7 @@ object SpecimenWebtable extends Command {
 
   val Help =
     s"""|Recreates the specimen webtable. This table is used to export specimen information from
-        |Biobank to other applications. if the argument \"dropfirst\" is used, the table will first
+        |Biobank to other applications. If the argument \"dropfirst\" is used, the table will first
         |be dropped before it is recreated. """.stripMargin
 
   val Usage = s"$Name [dropfirst]"

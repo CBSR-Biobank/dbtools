@@ -2,7 +2,13 @@ import AssemblyKeys._
 
 assemblySettings
 
-jarName in assembly := "biobank_dbtools.jar"
+name := "dbtools"
+
+version := "0.1-SNAPSHOT"
+
+assemblyOption in assembly ~= { _.copy(prependShellScript = Some(defaultShellScript)) }
+
+jarName in assembly := { s"${name.value}-${version.value}" }
 
 buildInfoSettings
 
@@ -11,10 +17,6 @@ sourceGenerators in Compile <+= buildInfo
 buildInfoKeys := Seq[BuildInfoKey](name, version, scalaVersion, sbtVersion)
 
 buildInfoPackage := "buildinfo"
-
-name := "dbtools"
-
-version := "0.1-SNAPSHOT"
 
 scalaVersion := "2.11.1"
 
