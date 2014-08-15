@@ -36,3 +36,6 @@ libraryDependencies ++= Seq(
   "com.typesafe"               %  "config"               % "1.2.1",
   "com.github.tototoshi"       %% "slick-joda-mapper"    % "1.2.0"
 )
+
+// allows calling System.exit() from application
+fork in run := true

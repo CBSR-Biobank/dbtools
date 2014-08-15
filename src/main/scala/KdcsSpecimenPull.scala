@@ -26,14 +26,14 @@ import java.io.File
   * Some of the specimens were already pulled and present in the SS container. The query on the
   * database takes this into account.
   */
-object PatientSamples {
+object KdcsSpecimenPull {
 
   case class DbSettings(host: String, name: String, user: String, password: String)
 
   val specimensFilename = "specimens.csv"
   val spcTypeCountFilename = "spcTypeCounts.csv"
 
-  def main(args: Array[String]) = {
+  def getSpecimens(args: Array[String])(implicit session: Session) = {
     if (args.size < 1) {
       println("\tError: no CSV files specified")
       System.exit(1)
@@ -43,33 +43,20 @@ object PatientSamples {
     }
 
     val csvInputFilename = args(0)
-    val specimensCsvWriter = CSVWriter.open(specimensFilename)
-    val spcTypeCountCsvWriter = CSVWriter.open(spcTypeCountFilename)
 
-    val conf = ConfigFactory.load("db")
-    val dbConf = conf.getConfig("db");
-    val dbSettings = DbSettings(
-      dbConf.getString("host"),
-      dbConf.getString("name"),
-      dbConf.getString("user"),
-      dbConf.getString("password"))
+    try {
+      val csvReader = CSVReader.open(csvInputFilename)
+      val specimensCsvWriter = CSVWriter.open(specimensFilename)
+      val spcTypeCountCsvWriter = CSVWriter.open(spcTypeCountFilename)
 
-    Database.forURL(
-      s"jdbc:mysql://${dbSettings.host}:3306/${dbSettings.name}",
-      driver   = "com.mysql.jdbc.Driver",
-      user     = dbSettings.user,
-      password = dbSettings.password).withSession { implicit session =>
-      try {
-        val csvReader = CSVReader.open(csvInputFilename)
-        new PatientSamples(csvReader, specimensCsvWriter, spcTypeCountCsvWriter)
-        csvReader.close()
-      } catch {
-        case ex: FileNotFoundException => println(s"File does not exist: $csvInputFilename")
-      }
+      new KdcsSpecimenPull(csvReader, specimensCsvWriter, spcTypeCountCsvWriter)
+
+      csvReader.close()
+      specimensCsvWriter.close()
+      spcTypeCountCsvWriter.close()
+    } catch {
+      case ex: FileNotFoundException => println(s"File does not exist: $csvInputFilename")
     }
-
-    specimensCsvWriter.close()
-    spcTypeCountCsvWriter.close()
   }
 }
 
@@ -78,7 +65,7 @@ object PatientSamples {
   *
   * @param specimensCsvWriter Where the specimensCsvWriter will be saved.
   */
-class PatientSamples(
+class KdcsSpecimenPull(
   csvReader: CSVReader,
   specimensCsvWriter: CSVWriter,
   spcTypeCountCsvWriter: CSVWriter)(implicit session: Session) {
