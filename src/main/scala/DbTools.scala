@@ -4,9 +4,13 @@ import scala.collection.mutable.Map
 
 object DbTools {
 
-  case class DbSettings(host: String, name: String, user: String, password: String)
+  case class AppConfig(host: String, name: String, user: String, password: String)
 
-  val commands: Map[String, Command] = Map()
+  val ConfigResourceName = "db"
+
+  val ConfigPath = "db"
+
+  lazy val appConfig: AppConfig = getConfig
 
   def main(args: Array[String]) = {
     println(s"${buildinfo.BuildInfo.name} version: ${buildinfo.BuildInfo.version}")
@@ -14,18 +18,18 @@ object DbTools {
 
     if (args.size < 1) {
       println("Error: command not specified.\n")
-      showCommands
+      Commands.showCommands
       System.exit(1)
     }
 
-    val command = args(0)
+    val commandName = args(0)
 
-    if (command == "help") {
+    if (commandName == "help") {
       if (args.size == 1) {
-        showCommandsAndHelp
+        Commands.showCommandsAndHelp
         System.exit(0)
       } else if (args.size == 2) {
-        showCommandHelp(args(1))
+        Commands.showCommandHelp(args(1))
         System.exit(0)
       } else  {
         println("\tError: invalid command")
@@ -33,66 +37,36 @@ object DbTools {
       }
     }
 
-    val conf = ConfigFactory.load("db")
+    appConfig
 
-    if (!conf.hasPath("db")) {
-      println("\tError: database settings not found in db.conf")
+    Database.forURL(
+      s"jdbc:mysql://${appConfig.host}:3306/${appConfig.name}",
+      driver   = "com.mysql.jdbc.Driver",
+      user     = appConfig.user,
+      password = appConfig.password).withSession { implicit session =>
+
+      Commands.invokeCommand(commandName, args.slice(1, args.length))
+    }
+  }
+
+  def getConfig: AppConfig = {
+    val conf = ConfigFactory.load(ConfigResourceName)
+
+    if (!conf.hasPath(ConfigPath)) {
+      println(s"\tError: settings not found in ${ConfigResourceName}.conf")
       System.exit(1)
     }
 
-    val dbConf = conf.getConfig("db");
-    val dbSettings = DbSettings(
+    val dbConf = conf.getConfig(ConfigPath);
+    AppConfig(
       dbConf.getString("host"),
       dbConf.getString("name"),
       dbConf.getString("user"),
       dbConf.getString("password"))
-
-
-    Database.forURL(
-      s"jdbc:mysql://${dbSettings.host}:3306/${dbSettings.name}",
-      driver   = "com.mysql.jdbc.Driver",
-      user     = dbSettings.user,
-      password = dbSettings.password).withSession { implicit session =>
-
-      if (commands.contains(command)) {
-        commands(command).invokeCommand(args.slice(1, args.length))
-      }
-    }
   }
 
   def addCommands = {
-    addCommand(SpecimenWebtable)
-    addCommand(KdcsSpecimenPull)
+    Commands.addCommand(SpecimenWebtable)
+    Commands.addCommand(KdcsSpecimenPull)
   }
-
-  def addCommand(command: Command) = {
-    commands += (command.Name -> command)
-  }
-
-  def showCommands = {
-    println("Possible commands:")
-
-    commands.values.foreach{ command =>
-      println(s"\t${command.Name}")
-    }
-  }
-
-  def showCommandsAndHelp = {
-    println("Possible commands:\n")
-
-    commands.values.foreach{ command =>
-      println(s"${command.Name} - ${command.Help}\n")
-    }
-  }
-
-  def showCommandHelp(commandName: String) = {
-    if (commands.contains(commandName)) {
-      val command = commands(commandName)
-      println(s"usage: ${command.Usage}\n\n${command.Help}")
-    } else  {
-      println("invalid command: $command")
-      System.exit(1)
-    }
-  }
-
 }

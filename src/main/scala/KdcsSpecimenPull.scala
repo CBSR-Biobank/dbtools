@@ -11,7 +11,7 @@ import org.joda.time.DateTime
 import org.joda.time.format.DateTimeFormat
 import com.github.nscala_time.time.Imports._
 import com.github.tototoshi.slick.MySQLJodaSupport._
-import java.io.File
+import scala.util.{ Try, Success, Failure }
 
 /** Tool that helps with a CBSR specimen pull.
   *
@@ -34,8 +34,6 @@ object KdcsSpecimenPull extends Command {
 
   val Usage = s"$Name CSVFILE"
 
-  case class DbSettings(host: String, name: String, user: String, password: String)
-
   val specimensFilename = "specimens.csv"
   val spcTypeCountFilename = "spcTypeCounts.csv"
 
@@ -50,18 +48,19 @@ object KdcsSpecimenPull extends Command {
 
     val csvInputFilename = args(0)
 
-    try {
-      val csvReader = CSVReader.open(csvInputFilename)
-      val specimensCsvWriter = CSVWriter.open(specimensFilename)
-      val spcTypeCountCsvWriter = CSVWriter.open(spcTypeCountFilename)
+    Try(CSVReader.open(csvInputFilename)) match {
+      case Success(csvReader) =>
+        val specimensCsvWriter = CSVWriter.open(specimensFilename)
+        val spcTypeCountCsvWriter = CSVWriter.open(spcTypeCountFilename)
 
-      new KdcsSpecimenPull(csvReader, specimensCsvWriter, spcTypeCountCsvWriter)
+        new KdcsSpecimenPull(csvReader, specimensCsvWriter, spcTypeCountCsvWriter)
 
-      csvReader.close()
-      specimensCsvWriter.close()
-      spcTypeCountCsvWriter.close()
-    } catch {
-      case ex: FileNotFoundException => println(s"File does not exist: $csvInputFilename")
+        csvReader.close()
+        specimensCsvWriter.close()
+        spcTypeCountCsvWriter.close()
+
+      case Failure(ex) =>
+        println(s"CSV file error: ${ex.getMessage}")
     }
   }
 }
