@@ -67,7 +67,6 @@ object SpecimenWebtable extends Command {
     args.length match {
       case 1 if (args(0) == "dropfirst") =>
         StaticQuery.updateNA(DropTable).execute
-        StaticQuery.updateNA(CreateTable).execute
         println("Dropping specimen webtable before recreating it")
       case 0 =>
       case _ =>
@@ -78,6 +77,7 @@ object SpecimenWebtable extends Command {
 
     println("creating specimen web table")
     val start = DateTime.now
+    StaticQuery.updateNA(CreateTable).execute
     StaticQuery.updateNA(TruncateTable).execute
     StaticQuery.updateNA(InsertIntoTable).execute
     println("...done.")
