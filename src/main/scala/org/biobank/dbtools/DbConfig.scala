@@ -2,19 +2,20 @@ package org.biobank.dbtools
 
 import com.typesafe.config._
 import scala.slick.jdbc.JdbcBackend.Database
+import java.io.File
 
 object DbConfig {
 
   case class DbConfigParams(host: String, name: String, user: String, password: String)
 
-  val ConfigResourceName = "db"
+  val ConfigFileName = "db.conf"
 
   val ConfigPath = "db"
 
-  val conf = ConfigFactory.load(ConfigResourceName)
+  val conf = ConfigFactory.parseFile(new File(ConfigFileName)).resolve()
 
   if (!conf.hasPath(ConfigPath)) {
-    println(s"\tError: settings not found in ${ConfigResourceName}.conf")
+    println(s"\tError: settings not found in ${ConfigFileName}")
     System.exit(1)
   }
 

@@ -68,6 +68,7 @@ object SpecimenWebtable extends Command {
       case 1 if (args(0) == "dropfirst") =>
         StaticQuery.updateNA(DropTable).execute
         println("Dropping specimen webtable before recreating it")
+      case 0 =>
       case _ =>
         println(s"\tError: invalid argument(s): ${args.mkString(", ")}")
         println(s"\nusage: $Usage")
