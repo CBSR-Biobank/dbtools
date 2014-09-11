@@ -1,3 +1,5 @@
+package org.biobank.dbtools
+
 import scala.collection.mutable.ListBuffer
 import com.github.tototoshi.csv._
 import org.slf4j.LoggerFactory

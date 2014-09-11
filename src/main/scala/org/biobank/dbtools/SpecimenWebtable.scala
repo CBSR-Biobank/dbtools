@@ -1,3 +1,5 @@
+package org.biobank.dbtools
+
 import scala.slick.driver.MySQLDriver.simple._
 import scala.slick.jdbc.StaticQuery
 import org.joda.time.DateTime
