@@ -27,26 +27,34 @@ import scala.util.{ Try, Success, Failure }
   *
   * Some of the specimens were already pulled and present in the SS container. The query on the
   * database takes this into account.
+  *
+  * On 2014-09-11, Aaron asked for the tool to help pull Plasma specimen types. The CSV file for
+  * plasma now has a count of the number of specimens to pull.
   */
 object KdcsSpecimenPull extends Command {
 
   val Name = "kdcspull"
 
-  val Help = "Helps with a CBSR specimen pull for KDCS study. Patient information comes from file CSVFILE."
+  val Help = s"""
+    |Helps with a CBSR specimen pull for KDCS study. Patient information comes from file CSVFILE.
+    |SPCTYPES can be either "serum" or "plasma" and where "serum" is default if not specified.
+    |""".stripMargin
 
-  val Usage = s"$Name CSVFILE"
+  val Usage = s"$Name CSVFILE SPCTYPES"
 
   val specimensFilename = "specimens.csv"
   val spcTypeCountFilename = "spcTypeCounts.csv"
 
   def invokeCommand(args: Array[String])(implicit session: Session) = {
     if (args.size < 1) {
-      println("\tError: no CSV file specified")
+      println("\tError: no arguments file specified")
       System.exit(1)
-    } else if (args.size > 1) {
+    } else if (args.size > 2) {
       println("\ttoo many paramters")
       System.exit(1)
     }
+
+    val specimenTypes = if (args.size == 2) { args(1) } else { "serum" }
 
     val csvInputFilename = args(0)
 
@@ -55,7 +63,7 @@ object KdcsSpecimenPull extends Command {
         val specimensCsvWriter = CSVWriter.open(specimensFilename)
         val spcTypeCountCsvWriter = CSVWriter.open(spcTypeCountFilename)
 
-        new KdcsSpecimenPull(csvReader, specimensCsvWriter, spcTypeCountCsvWriter)
+        new KdcsSpecimenPull(csvReader, specimenTypes, specimensCsvWriter, spcTypeCountCsvWriter)
 
         csvReader.close()
         specimensCsvWriter.close()
@@ -74,20 +82,13 @@ object KdcsSpecimenPull extends Command {
   */
 class KdcsSpecimenPull(
   csvReader: CSVReader,
+  specimenTypes: String,
   specimensCsvWriter: CSVWriter,
   spcTypeCountCsvWriter: CSVWriter)(implicit session: Session) {
 
   val log = Logger(LoggerFactory.getLogger(this.getClass))
 
-  val dateFormat = DateTimeFormat.forPattern("yyyy-MM-dd")
-
-  case class CollectionEvent(
-    id: Int,
-    visitNumber: Int,
-    patientId: Int,
-    activityStatusId: Int,
-    version: Int
-  )
+  val DateFormat = DateTimeFormat.forPattern("yyyy-MM-dd")
 
   case class Specimen(
     id: Int,
@@ -105,38 +106,21 @@ class KdcsSpecimenPull(
     version: Int
   )
 
-  implicit val getCollectioneventResult = GetResult(r =>
-    CollectionEvent(r.<<, r.<<, r.<<, r.<<, r.<<))
-
-  implicit val getSpecimenResult = GetResult(r =>
+  implicit val GetSpecimenResult = GetResult(r =>
     Specimen(r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<))
 
-  val ssPosInclude = List(
-    "SSBH08",
-    "SSBH09",
-    "SSBH10",
-    "SSBH11",
-    "SSBH12",
-    "SSBH13",
-    "SSBH14",
-    "SSBH15",
-    "SSBJ01",
-    "SSBJ02",
-    "SSBJ03",
-    "SSBJ04",
-    "SSBJ05",
-    "SSBJ06"
-  )
-
-  val VALID_SS_LABELS = """
+  val ValidSsLabels = """
     |'SSBH08', 'SSBH09', 'SSBH10', 'SSBH11', 'SSBH12', 'SSBH13', 'SSBH14', 'SSBH15',
     |'SSBJ01', 'SSBJ02', 'SSBJ03', 'SSBJ04', 'SSBJ05', 'SSBJ06'""".stripMargin
 
-  val VALID_SPC_TYPES = """
+  val SerumSpecimenTypes = """
     |'Serum B', 'SerumB100', 'SerumB300', 'SerumG100', 'SerumG300', 'SerumG400'
     """.stripMargin
 
-  val BASE_QRY = s"""
+  val PlasmaSpecimenTypes = "'Plasma'"
+
+  def BaseQry(specimenTypes: String, validSsLabels: String) = {
+    s"""
     |FROM specimen spc
     |LEFT JOIN specimen topspc ON topspc.id=spc.top_specimen_id
     |JOIN specimen_type stype ON stype.id=spc.specimen_type_id
@@ -150,29 +134,37 @@ class KdcsSpecimenPull(
     |LEFT JOIN container_type top_cntr_type ON top_cntr_type.id=top_cntr.container_type_id
     |WHERE pt.pnumber = ?
     |AND study.name_short = 'KDCS'
-    |AND stype.name_short in ($VALID_SPC_TYPES)
+    |AND stype.name_short in ($specimenTypes)
     |AND topspc.id is not NULL
     |AND (DATEDIFF(topspc.created_at, ?) >= -5 AND DATEDIFF(topspc.created_at, ?) <= 5)
     |AND cntr.id is not NULL
-    |AND (cntr.label not like 'SS%' OR cntr.label in ($VALID_SS_LABELS))
+    |AND (cntr.label not like 'SS%' OR cntr.label in ($validSsLabels))
     |AND spc.activity_status_id = 1""".stripMargin
+  }
 
-
-  val SPECIMEN_QRY = s"""
+  def SpecimenQry(baseQry: String) = {
+    s"""
     |SELECT spc.id, spc.inventory_id, stype.name_short, topspc.inventory_id, pt.pnumber,
     |   ce.visit_number, topspc.created_at, spc.quantity, center.name_short, cntr.label,
     |   spos.position_string, top_cntr_type.name_short
-    |$BASE_QRY""".stripMargin
+    |$baseQry""".stripMargin
+  }
 
-  val SPECIMEN_TYPE_COUNT_QRY = s"""
+  def SpecimenTypeCountQry(baseQry: String) = {
+    s"""
     |SELECT pt.pnumber, ce.visit_number, topspc.created_at, stype.name_short, count(*)
-    |$BASE_QRY
+    |$baseQry
     |GROUP BY stype.name_short""".stripMargin
+  }
 
   // used to keep track of errors
   val errors = new ListBuffer[String]
 
-  def getSpecimenInfo(pnumber: String, dateStr: String) = {
+  def getSpecimenInfo(
+    pnumber: String,
+    dateStr: String,
+    specimenTypes: String,
+    count: Option[Int] = None) = {
     case class SpecimenDetails(
       id: Int,
       inventoryId: String,
@@ -191,20 +183,23 @@ class KdcsSpecimenPull(
     implicit val getSpecimenDetailsResult = GetResult(r =>
       SpecimenDetails(r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<))
 
-    val qry = Q.query[(String, String, String), SpecimenDetails](SPECIMEN_QRY)
+    val baseQry = BaseQry(specimenTypes, ValidSsLabels)
+    val qry = Q.query[(String, String, String), SpecimenDetails](SpecimenQry(baseQry))
 
     val specimens = qry((pnumber, dateStr, dateStr)).list
 
     if (specimens.isEmpty) {
       errors += s"no specimens found for patient: patient: $pnumber, date: $dateStr"
     } else {
-      specimens.foreach{ specimen =>
+      val numToTake = count.getOrElse(specimens.size)
+
+      specimens.take(numToTake).foreach { specimen =>
         log.debug(s"result: $specimen")
 
         val row = List(
           specimen.pnumber,
           specimen.visitNumber,
-          dateFormat.print(specimen.dateDrawn),
+          DateFormat.print(specimen.dateDrawn),
           specimen.inventoryId,
           specimen.specimenTypeName,
           specimen.centreName,
@@ -215,11 +210,15 @@ class KdcsSpecimenPull(
         specimensCsvWriter.writeRow(row)
       }
 
+      // write empty row to make easier to read
       specimensCsvWriter.writeRow(List())
     }
   }
 
-  def getSpecimenCountInfo(pnumber: String, dateStr: String) = {
+  def getSpecimenCountInfo(
+    pnumber: String,
+    dateStr: String,
+    specimenTypes: String) = {
     case class SpecimenTypeCount(
       pnumber: String,
       visitNumber: Int,
@@ -230,7 +229,8 @@ class KdcsSpecimenPull(
     implicit val getSpecimenTypeCountResult = GetResult(r =>
       SpecimenTypeCount(r.<<, r.<<, r.<<, r.<<, r.<<))
 
-    val qry = Q.query[(String, String, String), SpecimenTypeCount](SPECIMEN_TYPE_COUNT_QRY)
+    val baseQry = BaseQry(specimenTypes, ValidSsLabels)
+    val qry = Q.query[(String, String, String), SpecimenTypeCount](SpecimenTypeCountQry(baseQry))
 
     val specimenCounts = qry((pnumber, dateStr, dateStr)).list
 
@@ -240,7 +240,7 @@ class KdcsSpecimenPull(
       val row = List(
         specimenCount.pnumber,
         specimenCount.visitNumber,
-        dateFormat.print(specimenCount.dateDrawn),
+        DateFormat.print(specimenCount.dateDrawn),
         specimenCount.specimenTypeName,
         specimenCount.count
       )
@@ -270,11 +270,27 @@ class KdcsSpecimenPull(
     "specimenCount"
   ))
 
-  csvReader.allWithHeaders.foreach{ csvRow =>
-    //log.debug(s"$csvRow")
-    getSpecimenInfo(csvRow("StudyNum"), csvRow("lbCollectionDate"))
-    getSpecimenCountInfo(csvRow("StudyNum"), csvRow("lbCollectionDate"))
+  specimenTypes match {
+    case "serum" => {
+      csvReader.allWithHeaders.foreach{ csvRow =>
+        //log.debug(s"$csvRow")
+        getSpecimenInfo(csvRow("StudyNum"), csvRow("lbCollectionDate"), SerumSpecimenTypes)
+        getSpecimenCountInfo(csvRow("StudyNum"), csvRow("lbCollectionDate"), SerumSpecimenTypes)
+      }
+    }
+    case "plasma" => {
+      csvReader.allWithHeaders.foreach{ csvRow =>
+        //log.debug(s"$csvRow")
+        getSpecimenInfo(
+          csvRow("StudyNum"),
+          csvRow("lbCollectionDate"),
+          PlasmaSpecimenTypes,
+          Some(csvRow("Count").toInt))
+        getSpecimenCountInfo(csvRow("StudyNum"), csvRow("lbCollectionDate"), PlasmaSpecimenTypes)
+      }
+    }
   }
+
 
   // display errors in file
   if (!errors.isEmpty) {
