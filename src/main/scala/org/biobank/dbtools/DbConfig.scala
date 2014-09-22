@@ -4,6 +4,11 @@ import com.typesafe.config._
 import scala.slick.jdbc.JdbcBackend.Database
 import java.io.File
 
+/**
+  * For connection pooling see:
+  *
+  * http://fernandezpablo85.github.io/2013/04/07/slick_connection_pooling.html
+  */
 object DbConfig {
 
   case class DbConfigParams(host: String, name: String, user: String, password: String)

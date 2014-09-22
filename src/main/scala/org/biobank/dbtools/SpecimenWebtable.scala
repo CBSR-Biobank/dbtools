@@ -25,6 +25,7 @@ object SpecimenWebtable extends Command {
         |  `STUDY` varchar(50) CHARACTER SET latin1 COLLATE latin1_general_cs DEFAULT NULL,
         |  `PNUMBER` varchar(100) CHARACTER SET latin1 COLLATE latin1_general_cs DEFAULT NULL,
         |  `VNUMBER` int(11) DEFAULT NULL,
+        |  `DATE_DRAWN` datetime DEFAULT NULL,
         |  `CREATED_AT` datetime DEFAULT NULL,
         |  `CENTER` varchar(255) CHARACTER SET latin1 COLLATE latin1_general_cs DEFAULT NULL,
         |  `POS_LABEL` varchar(255) CHARACTER SET latin1 COLLATE latin1_general_cs DEFAULT NULL,
@@ -37,15 +38,15 @@ object SpecimenWebtable extends Command {
   // For now inserts NULLs for comments
   val InsertIntoTable =
     s"""|INSERT INTO specimen_webtable (
-        |   INVENTORY_ID, SPECIMEN_TYPE, SINVENTORY_ID, STUDY, PNUMBER, VNUMBER, CREATED_AT, CENTER,
-        |   POS_LABEL, QUANTITY, TOP_CONTAINER, COMMENT)
+        |   INVENTORY_ID, SPECIMEN_TYPE, SINVENTORY_ID, STUDY, PNUMBER, VNUMBER, DATE_DRAWN, CREATED_AT,
+        |   CENTER, POS_LABEL, QUANTITY, TOP_CONTAINER, COMMENT)
         |SELECT spc.inventory_id, stype.name, topspc.inventory_id, study.name_short, pt.pnumber,
-        |   ce.visit_number, spc.created_at, center.name_short,
+        |   ce.visit_number, topspc.created_at, spc.created_at, center.name_short,
         |   CONCAT(cntr.label, spos.position_string),  spc.quantity, top_cntr_type.name_short, null
         |FROM specimen spc
         |LEFT JOIN specimen topspc ON topspc.id=spc.top_specimen_id
         |JOIN specimen_type stype ON stype.id=spc.specimen_type_id
-        |JOIN collection_event ce ON ce.id=spc.collection_event_id
+        |JOIN collection_event ce ON ce.id=topspc.collection_event_id
         |JOIN patient pt ON pt.id=ce.patient_id
         |JOIN study ON study.id=pt.study_id
         |JOIN center ON center.id=spc.current_center_id
