@@ -40,5 +40,6 @@ object DbTools {
   def addCommands = {
     Commands.addCommand(SpecimenWebtable)
     Commands.addCommand(KdcsSpecimenPull)
+    Commands.addCommand(SpecimenDelete)
   }
 }
