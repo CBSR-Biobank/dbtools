@@ -8,6 +8,7 @@ import org.joda.time.format.DateTimeFormat
 import scala.slick.driver.MySQLDriver.simple._
 import com.github.tototoshi.slick.MySQLJodaSupport._
 import com.github.nscala_time.time.Imports._
+import com.github.tototoshi.csv._
 
 object Pull20150309 extends Command {
 
@@ -19,45 +20,47 @@ object Pull20150309 extends Command {
   val Usage = s"$Name"
 
   val patients = List(
-    "UB0078",
-    "UB0079",
-    "UB0083",
-    "UB0073",
-    "UB0074",
-    "UB0080",
-    "UB0103",
-    "UB0110",
+    "UB0002",
     "UB0007",
-    "UB0048",
+    "UB0010",
     "UB0014",
+    "UB0022",
+    "UB0025",
+    "UB0026",
     "UB0037",
-    "UB0111",
-    "UB0103",
-    "UB0092",
-    "UB0086",
-    "UB0090",
+    "UB0041",
+    "UB0047",
+    "UB0048",
+    "UB0053",
+    "UB0054",
+    "UB0061",
     "UB0064",
     "UB0065",
-    "UB0026",
-    "UB0131",
-    "UB0061",
-    "UB0002",
-    "UB0047",
-    "UB0132",
-    "UB0053",
-    "UB0072",
-    "UB0109",
     "UB0066",
     "UB0067",
     "UB0068",
-    "UB0010",
-    "UB0025",
-    "UB0041",
-    "UB0054",
-    "UB0022",
+    "UB0072",
+    "UB0073",
+    "UB0074",
     "UB0075",
-    "UB0081"
+    "UB0078",
+    "UB0079",
+    "UB0080",
+    "UB0081",
+    "UB0083",
+    "UB0086",
+    "UB0090",
+    "UB0092",
+    "UB0103",
+    "UB0103",
+    "UB0109",
+    "UB0110",
+    "UB0111",
+    "UB0131",
+    "UB0132"
   )
+
+  val SpecimensFilename = "specimens.csv"
 
   val CreateTable =
     s"""|CREATE TEMPORARY TABLE IF NOT EXISTS `pull_patient` (
@@ -84,12 +87,12 @@ object Pull20150309 extends Command {
     |LEFT JOIN container_type top_cntr_type ON top_cntr_type.id=top_cntr.container_type_id
     |JOIN pull_patient pp on pp.pnumber=pt.pnumber
     |WHERE stype.name_short in ($specimenTypes)
-    |AND ce.visit_number=1
     |AND topspc.id is not NULL
     |AND cntr.id is not NULL
     |AND (cntr.label not like 'SS%')
     |AND spc.activity_status_id = 1
-    |ORDER BY pt.pnumber,topspc.created_at""".stripMargin
+    |GROUP BY pt.pnumber, ce.visit_number
+    |ORDER BY pt.pnumber, ce.visit_number, topspc.created_at""".stripMargin
   }
 
   val DateFormat = DateTimeFormat.forPattern("yyyy-MM-dd")
@@ -104,7 +107,22 @@ object Pull20150309 extends Command {
 
       patients.foreach(insertPullPatient)
 
-      Q.queryNA[SpecimenDetails](BaseQry("'PlasmaL1000'")) foreach { specimen =>
+      val specimensCsvWriter = CSVWriter.open(SpecimensFilename)
+
+      specimensCsvWriter.writeRow(List(
+                                    "pnumber",
+                                    "visitNumber",
+                                    "dateDrawn",
+                                    "inventoryId",
+                                    "specimenType",
+                                    "centre",
+                                    "label",
+                                    "topContainerType"
+                                  ))
+
+      var specimens = Q.queryNA[SpecimenDetails](BaseQry("'PlasmaL1000'"))
+
+      specimens.foreach { specimen =>
 
         val row = List(
           specimen.pnumber,
@@ -117,7 +135,7 @@ object Pull20150309 extends Command {
           specimen.topContainerTypeName
         )
 
-        println(row.mkString(", "))
+        specimensCsvWriter.writeRow(row)
       }
     }
   }

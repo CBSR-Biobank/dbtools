@@ -11,6 +11,7 @@ import Q.interpolation
 import com.typesafe.config.ConfigFactory
 import org.joda.time.DateTime
 import org.joda.time.format.DateTimeFormat
+import com.github.tototoshi.slick.MySQLJodaSupport._
 import com.github.nscala_time.time.Imports._
 import scala.util.{ Try, Success, Failure }
 
