@@ -41,5 +41,6 @@ object DbTools {
     Commands.addCommand(SpecimenWebtable)
     Commands.addCommand(KdcsSpecimenPull)
     Commands.addCommand(SpecimenDelete)
+    Commands.addCommand(Pull20150309)
   }
 }

@@ -12,7 +12,6 @@ import com.typesafe.config.ConfigFactory
 import org.joda.time.DateTime
 import org.joda.time.format.DateTimeFormat
 import com.github.nscala_time.time.Imports._
-import com.github.tototoshi.slick.MySQLJodaSupport._
 import scala.util.{ Try, Success, Failure }
 
 /** Tool that helps with a CBSR specimen pull.
@@ -165,23 +164,6 @@ class KdcsSpecimenPull(
     dateStr: String,
     specimenTypes: String,
     count: Option[Int] = None) = {
-    case class SpecimenDetails(
-      id: Int,
-      inventoryId: String,
-      specimenTypeName: String,
-      parentInventoryId: String,
-      pnumber: String,
-      visitNumber: Int,
-      dateDrawn: DateTime,
-      quantity: Option[BigDecimal],
-      centreName: String,
-      containerLabel: String,
-      specimenPos: String,
-      topContainerTypeName: String
-    )
-
-    implicit val getSpecimenDetailsResult = GetResult(r =>
-      SpecimenDetails(r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<))
 
     val baseQry = BaseQry(specimenTypes, ValidSsLabels)
     val qry = Q.query[(String, String, String), SpecimenDetails](SpecimenQry(baseQry))
